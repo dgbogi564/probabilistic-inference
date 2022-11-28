@@ -219,61 +219,61 @@ class Grid:
             file.write(''.join(sensor_readings) + '\n')
         return filepath
 
-    @classmethod
-    def generate_experiment(cls, grid):
-        row, column = -1, -1
-        starting_row, starting_column = -1, -1
-        rows, columns = len(grid), len(grid[0])
-        coordinates = [(r, c) for r in range(rows) for c in range(columns)]
+    # @classmethod
+    # def generate_experiment(cls, grid):
+    #     row, column = -1, -1
+    #     starting_row, starting_column = -1, -1
+    #     rows, columns = len(grid), len(grid[0])
+    #     coordinates = [(r, c) for r in range(rows) for c in range(columns)]
 
-        # check if unblocked cells exist
-        if not any(terrain in row for terrain in [Grid.NORMAL, Grid.HIGHWAY, Grid.HARD_TO_TRAVERSE] for row in grid):
-            raise Exception("No unblocked cells exist")
+    #     # check if unblocked cells exist
+    #     if not any(terrain in row for terrain in [Grid.NORMAL, Grid.HIGHWAY, Grid.HARD_TO_TRAVERSE] for row in grid):
+    #         raise Exception("No unblocked cells exist")
 
-        # get random unblocked cell
-        while row == -1:
-            r, c = random.choice(coordinates)
-            if grid[r][c] != Grid.BLOCKED:
-                row = r
-                column = c
+    #     # get random unblocked cell
+    #     while row == -1:
+    #         r, c = random.choice(coordinates)
+    #         if grid[r][c] != Grid.BLOCKED:
+    #             row = r
+    #             column = c
 
-        # generate actions, ground truth states, and sensor readings
-        actions = []
-        ground_truth_states = [f'{row} {column}']  # append starting row and column
-        sensor_readings = []
-        for x in range(100):
-            # actions
-            action = random.choice([Grid.UP, Grid.DOWN, Grid.LEFT, Grid.RIGHT])
-            actions.append(action)
+    #     # generate actions, ground truth states, and sensor readings
+    #     actions = []
+    #     ground_truth_states = [f'{row} {column}']  # append starting row and column
+    #     sensor_readings = []
+    #     for x in range(100):
+    #         # actions
+    #         action = random.choice([Grid.UP, Grid.DOWN, Grid.LEFT, Grid.RIGHT])
+    #         actions.append(action)
 
-            # ground truth states
-            num = random.uniform(0, 1)
-            if 0 <= num < 0.9:
-                match action:
-                    case Grid.UP:
-                        if row > 0 and grid[row - 1][column] != Grid.BLOCKED:
-                            row -= 1
-                    case Grid.DOWN:
-                        if row < rows - 1 and grid[row + 1][column] != Grid.BLOCKED:
-                            row += 1
-                    case Grid.LEFT:
-                        if column > 0 and grid[row][column - 1] != Grid.BLOCKED:
-                            column -= 1
-                    case Grid.RIGHT:
-                        if column < columns - 1 and grid[row][column + 1] != Grid.BLOCKED:
-                            column += 1
-            ground_truth_states.append(f'{row + 1} {column + 1}')
+    #         # ground truth states
+    #         num = random.uniform(0, 1)
+    #         if 0 <= num < 0.9:
+    #             match action:
+    #                 case Grid.UP:
+    #                     if row > 0 and grid[row - 1][column] != Grid.BLOCKED:
+    #                         row -= 1
+    #                 case Grid.DOWN:
+    #                     if row < rows - 1 and grid[row + 1][column] != Grid.BLOCKED:
+    #                         row += 1
+    #                 case Grid.LEFT:
+    #                     if column > 0 and grid[row][column - 1] != Grid.BLOCKED:
+    #                         column -= 1
+    #                 case Grid.RIGHT:
+    #                     if column < columns - 1 and grid[row][column + 1] != Grid.BLOCKED:
+    #                         column += 1
+    #         ground_truth_states.append(f'{row + 1} {column + 1}')
 
-            # sensor readings
-            num = random.uniform(0, 1)
-            if 0 <= num < 0.9:
-                sensor_reading = grid[row][column]
-            else:
-                sensor_reading = random.choice(
-                    [x for x in [Grid.NORMAL, Grid.HIGHWAY, Grid.HARD_TO_TRAVERSE] if x != grid[row][column]])
-            sensor_readings.append(sensor_reading)
+    #         # sensor readings
+    #         num = random.uniform(0, 1)
+    #         if 0 <= num < 0.9:
+    #             sensor_reading = grid[row][column]
+    #         else:
+    #             sensor_reading = random.choice(
+    #                 [x for x in [Grid.NORMAL, Grid.HIGHWAY, Grid.HARD_TO_TRAVERSE] if x != grid[row][column]])
+    #         sensor_readings.append(sensor_reading)
 
-        return ground_truth_states, actions, sensor_readings
+    #     return ground_truth_states, actions, sensor_readings
         
 
     @classmethod
@@ -295,11 +295,16 @@ class Grid:
                     probabilities[row][column] = 0
                     match actions[i]:
                         # Failed to move to next cell from current cell (fails)
+                        # Stays at current cell, but didnt fail (blocked or at border)
                         # Move to current cell from previous cell (success)
                         case Grid.UP:                            
                             # Failed to move to next cell from current cell (fails)
                             if row > 0 and grid[row - 1][column] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.1 * prev_probabilities[row][column]
+                            # Stays at current cell, but didnt fail (blocked or at border)
+                            else:
+                                probabilities[row][column] += prev_probabilities[row][column]
+
                             # Move to current cell from previous cell (success)
                             if row < rows - 1 and grid[row + 1][column] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.9 * prev_probabilities[row+1][column]
@@ -308,6 +313,7 @@ class Grid:
                             # Failed to move to next cell from current cell (fails)
                             if row < rows - 1 and grid[row + 1][column] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.1 * prev_probabilities[row][column]
+                            
                             # Move to current cell from previous cell (success)
                             if row > 0 and grid[row - 1][column] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.9 * prev_probabilities[row-1][column]
@@ -317,6 +323,8 @@ class Grid:
                             # Failed to move to next cell from current cell (fails)
                             if column > 0 and grid[row][column - 1] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.1 * prev_probabilities[row][column]
+                            else:
+                                probabilities[row][column] += prev_probabilities[row][column]
                             # Move to current cell from previous cell (success)
                             if column < columns - 1 and grid[row][column+1] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.9 * prev_probabilities[row][column+1]
@@ -325,12 +333,11 @@ class Grid:
                             # Failed to move to next cell from current cell (fails)
                             if column < columns - 1 and grid[row][column + 1] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.1 * prev_probabilities[row][column]
+                            else:
+                                probabilities[row][column] += prev_probabilities[row][column]
                             # Move to current cell from previous cell (success)
                             if column > 0 and grid[row][column-1] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.9 * prev_probabilities[row][column-1]
-
-                    if probabilities[row][column] == 0:
-                        probabilities[row][column] = prev_probabilities[row-1][column]
 
             #new
             """
