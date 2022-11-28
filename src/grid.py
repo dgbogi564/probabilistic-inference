@@ -311,6 +311,7 @@ class Grid:
                             if row > 0 and grid[row - 1][column] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.9 * prev_probabilities[row-1][column]
 
+
                         case Grid.LEFT:
                             # Failed to move to next cell from current cell (fails)
                             if column > 0 and grid[row][column - 1] != Grid.BLOCKED:
@@ -326,6 +327,9 @@ class Grid:
                             # Move to current cell from previous cell (success)
                             if column > 0 and grid[row][column-1] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.9 * prev_probabilities[row][column-1]
+                                
+                    if probabilities[row][column] == 0:
+                        probabilities[row][column] = prev_probabilities[row-1][column]
 
             #new
             """
@@ -435,7 +439,7 @@ def test():
             print('[FAILED] Import experiment:\n' + e.__str__() + '\n\n')
 
     grid = Grid.import_grid('part_a_grid.txt')
-    _, actions, sensor_readings = Grid.import_experiment('part_a_experiment.txt', 4)
+    _, actions, sensor_readings = Grid.import_experiment('part_a_experiment.txt', 1)
     probabilities = Grid.calculate_probabilities(grid, actions, sensor_readings)
     if grid is not None and probabilities is not None:
         print("[INFO] Drawing grid...")
