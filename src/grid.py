@@ -289,47 +289,43 @@ class Grid:
             # actions
             for row in range(rows):
                 for column in range(columns):
+                    if grid[row][column] == Grid.BLOCKED:
+                        continue
+                    probabilities[row][column] = 0
                     match actions[i]:
-                        # On else, we will be guaranteed to stay at the current grid,
-                        # thus the probability does not change (1 * x = x).
-                        case Grid.UP:
-                            if grid[row][column] != Grid.BLOCKED:
-                                if row == 0:
-                                    if grid[row - 1][column] != Grid.BLOCKED:
-                                        probabilities[row][column] = 0.1 * prev_probabilities[row][column]
-                                elif row == 0 or grid[row - 1][column] == Grid.BLOCKED:
-                                    probabilities[row][column] += 0.9 * prev_probabilities[row + 1][column]
-                                else:
-                                    probabilities[row][column] = 0.1 * prev_probabilities[row][column] + 0.9 * prev_probabilities[row + 1][column]
+                        # Failed to move to next cell from current cell (fails)
+                        # Move to current cell from previous cell (success)
+                        case Grid.UP:                            
+                            # Failed to move to next cell from current cell (fails)
+                            if row > 0 and grid[row - 1][column] != Grid.BLOCKED:
+                                probabilities[row][column] += 0.1 * prev_probabilities[row][column]
+                            # Move to current cell from previous cell (success)
+                            if row < rows - 1 and grid[row + 1][column] != Grid.BLOCKED:
+                                probabilities[row][column] += 0.9 * prev_probabilities[row+1][column]
+
                         case Grid.DOWN:
-                            if grid[row][column] != Grid.BLOCKED:
-                                if row == 0:
-                                    if grid[row + 1][column] != Grid.BLOCKED:
-                                        probabilities[row][column] = 0.1 * prev_probabilities[row][column]
-                                elif row == rows - 1 or grid[row + 1][column] == Grid.BLOCKED:
-                                    probabilities[row][column] += 0.9 * prev_probabilities[row - 1][column]
-                                else:
-                                    probabilities[row][column] = 0.1 * prev_probabilities[row][column] + 0.9 * prev_probabilities[row - 1][column]
+                            # Failed to move to next cell from current cell (fails)
+                            if row < rows - 1 and grid[row + 1][column] != Grid.BLOCKED:
+                                probabilities[row][column] += 0.1 * prev_probabilities[row][column]
+                            # Move to current cell from previous cell (success)
+                            if row > 0 and grid[row - 1][column] != Grid.BLOCKED:
+                                probabilities[row][column] += 0.9 * prev_probabilities[row-1][column]
+
                         case Grid.LEFT:
-                            if grid[row][column] != Grid.BLOCKED:
-                                if column == columns - 1:
-                                    if grid[row][column - 1] != Grid.BLOCKED:
-                                        probabilities[row][column] = 0.1 * prev_probabilities[row][column]
-                                elif column == 0 or grid[row][column - 1] == Grid.BLOCKED:
-                                    probabilities[row][column] += 0.9 * prev_probabilities[row][column + 1]
-                                else:
-                                    probabilities[row][column] = 0.1 * prev_probabilities[row][column] + 0.9 * prev_probabilities[row][column + 1]
+                            # Failed to move to next cell from current cell (fails)
+                            if column > 0 and grid[row][column - 1] != Grid.BLOCKED:
+                                probabilities[row][column] += 0.1 * prev_probabilities[row][column]
+                            # Move to current cell from previous cell (success)
+                            if column < columns - 1 and grid[row][column+1] != Grid.BLOCKED:
+                                probabilities[row][column] += 0.9 * prev_probabilities[row][column+1]
+                            
                         case Grid.RIGHT:
-                            if grid[row][column] != Grid.BLOCKED:
-                                #if on the leftmost column
-                                #if columns == columns - 1
-                                if column == 0:
-                                    if grid[row][column + 1] != Grid.BLOCKED:
-                                        probabilities[row][column] = 0.1 * prev_probabilities[row][column]
-                                elif column == columns - 1 or grid[row][column + 1] == Grid.BLOCKED:
-                                    probabilities[row][column] += 0.9 * prev_probabilities[row][column - 1]
-                                else:
-                                    probabilities[row][column] = 0.1 * prev_probabilities[row][column] + 0.9 * prev_probabilities[row][column - 1]
+                            # Failed to move to next cell from current cell (fails)
+                            if column < columns - 1 and grid[row][column + 1] != Grid.BLOCKED:
+                                probabilities[row][column] += 0.1 * prev_probabilities[row][column]
+                            # Move to current cell from previous cell (success)
+                            if column > 0 and grid[row][column-1] != Grid.BLOCKED:
+                                probabilities[row][column] += 0.9 * prev_probabilities[row][column-1]
 
             #new
             """
