@@ -73,7 +73,7 @@ class Grid:
         window = pygame.display.set_mode((width, height), pygame.RESIZABLE)
 
         canvas = pygame.Surface((base_cell_size * (columns + 1), base_cell_size * (rows + 1)))
-        canvas.fill(Grid.RED)  # TODO canvas.fill(Grid.WHITE)
+        canvas.fill(Grid.WHITE)  # TODO canvas.fill(Grid.WHITE)
         canvas_rect = canvas.get_rect()
 
         def draw(zoom):
@@ -88,7 +88,7 @@ class Grid:
             circle_radius = max(1, round(base_circle_radius * zoom))
 
             canvas = pygame.Surface((cell_size * (columns + 1), cell_size * (rows + 1)))
-            canvas.fill(Grid.RED)
+            canvas.fill(Grid.WHITE)
             canvas_rect = canvas.get_rect()
 
             # Create border with the same size as the grid, centered in image.
@@ -274,6 +274,7 @@ class Grid:
             sensor_readings.append(sensor_reading)
 
         return ground_truth_states, actions, sensor_readings
+        
 
     @classmethod
     def calculate_probabilities(cls, grid, actions, sensor_readings):
@@ -327,7 +328,7 @@ class Grid:
                             # Move to current cell from previous cell (success)
                             if column > 0 and grid[row][column-1] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.9 * prev_probabilities[row][column-1]
-                                
+
                     if probabilities[row][column] == 0:
                         probabilities[row][column] = prev_probabilities[row-1][column]
 
@@ -347,7 +348,7 @@ class Grid:
                 - starting at 0,3
             """
 
-
+            x = 0
             # sensor readings
             for row in range(rows):
                 for column in range(columns):
@@ -355,13 +356,13 @@ class Grid:
                         probabilities[row][column] *= 0.9
                     else:
                         probabilities[row][column] *= 0.05
-
+            x = 0
             # normalization
             sum_probabilities = sum(sum(r) for r in probabilities)
             for row in range(rows):
                 for column in range(columns):
                     probabilities[row][column] /= sum_probabilities
-
+            x = 0
             # setting probabilities in preparation for next step
             prev_probabilities = [r[:] for r in probabilities]
 
@@ -439,7 +440,7 @@ def test():
             print('[FAILED] Import experiment:\n' + e.__str__() + '\n\n')
 
     grid = Grid.import_grid('part_a_grid.txt')
-    _, actions, sensor_readings = Grid.import_experiment('part_a_experiment.txt', 1)
+    _, actions, sensor_readings = Grid.import_experiment('part_a_experiment.txt', 4)
     probabilities = Grid.calculate_probabilities(grid, actions, sensor_readings)
     if grid is not None and probabilities is not None:
         print("[INFO] Drawing grid...")
