@@ -125,7 +125,7 @@ class Grid:
 
                     # draw cell probabilities
                     probability_label = pygame.font.SysFont('calibri', font_size).render(
-                        "{:.2f}".format(probabilities[row][column] * 100) + "%", True, Grid.BLACK)
+                        "{:.7f}".format(probabilities[row][column] * 100) + "%", True, Grid.BLACK)
                     probability_label_rect = probability_label.get_rect(
                         center=(left + cell_size // 2, top + cell_size // 2))
                     canvas.blit(probability_label, probability_label_rect)
@@ -202,6 +202,7 @@ class Grid:
             sensor_reading_states = file.readline().strip('\n')
             for x in range(len(sensor_reading_states)):
                 sensor_readings.append(sensor_reading_states[x])
+
         return ground_truth_states, actions, sensor_readings
 
     @classmethod
@@ -292,21 +293,43 @@ class Grid:
                         # On else, we will be guaranteed to stay at the current grid,
                         # thus the probability does not change (1 * x = x).
                         case Grid.UP:
-                            if row > 0 and grid[row][column] != Grid.BLOCKED:
-                                probabilities[row - 1][column] *= prev_probabilities[row][column] * 0.9
-                                probabilities[row][column] *= 0.1
+                            if grid[row][column] != Grid.BLOCKED:
+                                if row == 0:
+                                    if grid[row - 1][column] != Grid.BLOCKED:
+                                        probabilities[row][column] = 0.1 * prev_probabilities[row][column]
+                                elif row == 0 or grid[row - 1][column] == Grid.BLOCKED:
+                                    probabilities[row][column] += 0.9 * prev_probabilities[row + 1][column]
+                                else:
+                                    probabilities[row][column] = 0.1 * prev_probabilities[row][column] + 0.9 * prev_probabilities[row + 1][column]
                         case Grid.DOWN:
-                            if row < rows - 1 and grid[row][column] != Grid.BLOCKED:
-                                probabilities[row + 1][column] *= prev_probabilities[row][column] * 0.9
-                                probabilities[row][column] *= 0.1
+                            if grid[row][column] != Grid.BLOCKED:
+                                if row == 0:
+                                    if grid[row + 1][column] != Grid.BLOCKED:
+                                        probabilities[row][column] = 0.1 * prev_probabilities[row][column]
+                                elif row == rows - 1 or grid[row + 1][column] == Grid.BLOCKED:
+                                    probabilities[row][column] += 0.9 * prev_probabilities[row - 1][column]
+                                else:
+                                    probabilities[row][column] = 0.1 * prev_probabilities[row][column] + 0.9 * prev_probabilities[row - 1][column]
                         case Grid.LEFT:
-                            if column > 0 and grid[row][column] != Grid.BLOCKED:
-                                probabilities[row][column - 1] *= prev_probabilities[row][column] * 0.9
-                                probabilities[row][column] *= 0.1
+                            if grid[row][column] != Grid.BLOCKED:
+                                if column == columns - 1:
+                                    if grid[row][column - 1] != Grid.BLOCKED:
+                                        probabilities[row][column] = 0.1 * prev_probabilities[row][column]
+                                elif column == 0 or grid[row][column - 1] == Grid.BLOCKED:
+                                    probabilities[row][column] += 0.9 * prev_probabilities[row][column + 1]
+                                else:
+                                    probabilities[row][column] = 0.1 * prev_probabilities[row][column] + 0.9 * prev_probabilities[row][column + 1]
                         case Grid.RIGHT:
-                            if column < columns - 1 and grid[row][column] != Grid.BLOCKED:
-                                probabilities[row][column + 1] *= prev_probabilities[row][column] * 0.9
-                                probabilities[row][column] *= 0.1
+                            if grid[row][column] != Grid.BLOCKED:
+                                #if on the leftmost column
+                                #if columns == columns - 1
+                                if column == 0:
+                                    if grid[row][column + 1] != Grid.BLOCKED:
+                                        probabilities[row][column] = 0.1 * prev_probabilities[row][column]
+                                elif column == columns - 1 or grid[row][column + 1] == Grid.BLOCKED:
+                                    probabilities[row][column] += 0.9 * prev_probabilities[row][column - 1]
+                                else:
+                                    probabilities[row][column] = 0.1 * prev_probabilities[row][column] + 0.9 * prev_probabilities[row][column - 1]
 
             #new
             """
@@ -315,9 +338,9 @@ class Grid:
             0,1: 2 different calculations to get to 0, 1 (be at 0,1 or move from 0,0 to 0, 1)
                 - calculate both
                 - starting at 0, 1 and staying at 0, 1
-                - 0.1 for not moving * mislabeling terrain * 1/8
-                - moving from 0, 0 to 0, 1: 0.9 * 0.05 (mislabeling) * 1/8
-                - use 2 probabilities and normalize them
+                - 0.1 for not moving * mislabeling terrain
+                - moving from 0, 0 to 0, 1: 0.9 * 0.05 (mislabeling)
+                - add two probabilities: (0,0) to (0,0) + (0,0) to (0,1) * 1/8
             0,3: probability is 1
                 - normalize again
                 - moving from 0,2 to 0,3
