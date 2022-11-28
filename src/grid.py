@@ -1,11 +1,9 @@
-import sys
-from datetime import datetime
 import pygame
-from pygame.locals import *
 import random
-
-
-# TODO input grid format?
+import sys
+import os
+from datetime import datetime
+from pygame.locals import *
 
 class Grid:
     BLACK = (0, 0, 0)  # BORDERS
@@ -31,9 +29,8 @@ class Grid:
         return grid
 
     @classmethod
-    def save_grid(cls, grid):
+    def save_grid(cls, grid, filepath):
         rows, columns = len(grid), len(grid[0])
-        filepath = f'grid_{datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")}.txt'
         with open(filepath, "w") as file:
             file.write(f'{rows} {columns}\n')
             for row in range(rows):
@@ -206,8 +203,7 @@ class Grid:
         return ground_truth_states, actions, sensor_readings
 
     @classmethod
-    def save_experiment(cls, ground_truth_states, actions, sensor_readings):
-        filepath = f'experiment_{datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")}.txt'
+    def save_experiment(cls, ground_truth_states, actions, sensor_readings, filepath):
         with open(filepath, "w") as file:
             # write ground truth states
             file.write('\n'.join(ground_truth_states) + '\n')
@@ -274,7 +270,6 @@ class Grid:
             sensor_readings.append(sensor_reading)
 
         return ground_truth_states, actions, sensor_readings
-        
 
     @classmethod
     def calculate_probabilities(cls, grid, actions, sensor_readings):
@@ -295,13 +290,13 @@ class Grid:
                     probabilities[row][column] = 0
                     match actions[i]:
                         # Failed to move to next cell from current cell (fails)
-                        # Stays at current cell, but didnt fail (blocked or at border)
+                        # Stays at current cell, but didn't fail (blocked or at border)
                         # Move to current cell from previous cell (success)
-                        case Grid.UP:                            
+                        case Grid.UP:
                             # Failed to move to next cell from current cell (fails)
                             if row > 0 and grid[row - 1][column] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.1 * prev_probabilities[row][column]
-                            # Stays at current cell, but didnt fail (blocked or at border)
+                            # Stays at current cell, but didn't fail (blocked or at border)
                             else:
                                 probabilities[row][column] += prev_probabilities[row][column]
 
@@ -313,7 +308,7 @@ class Grid:
                             # Failed to move to next cell from current cell (fails)
                             if row < rows - 1 and grid[row + 1][column] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.1 * prev_probabilities[row][column]
-                            
+
                             # Move to current cell from previous cell (success)
                             if row > 0 and grid[row - 1][column] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.9 * prev_probabilities[row-1][column]
@@ -328,7 +323,7 @@ class Grid:
                             # Move to current cell from previous cell (success)
                             if column < columns - 1 and grid[row][column+1] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.9 * prev_probabilities[row][column+1]
-                            
+
                         case Grid.RIGHT:
                             # Failed to move to next cell from current cell (fails)
                             if column < columns - 1 and grid[row][column + 1] != Grid.BLOCKED:
@@ -339,23 +334,6 @@ class Grid:
                             if column > 0 and grid[row][column-1] != Grid.BLOCKED:
                                 probabilities[row][column] += 0.9 * prev_probabilities[row][column-1]
 
-            #new
-            """
-            0,0: edge case (nothing can ever move to the right square)
-                - probability of it not moving (0.1) * mislabeling terrain (0.05) * probability of square originally (1/8)
-            0,1: 2 different calculations to get to 0, 1 (be at 0,1 or move from 0,0 to 0, 1)
-                - calculate both
-                - starting at 0, 1 and staying at 0, 1
-                - 0.1 for not moving * mislabeling terrain
-                - moving from 0, 0 to 0, 1: 0.9 * 0.05 (mislabeling)
-                - add two probabilities: (0,0) to (0,0) + (0,0) to (0,1) * 1/8
-            0,3: probability is 1
-                - normalize again
-                - moving from 0,2 to 0,3
-                - starting at 0,3
-            """
-
-            x = 0
             # sensor readings
             for row in range(rows):
                 for column in range(columns):
@@ -363,13 +341,13 @@ class Grid:
                         probabilities[row][column] *= 0.9
                     else:
                         probabilities[row][column] *= 0.05
-            x = 0
+
             # normalization
             sum_probabilities = sum(sum(r) for r in probabilities)
             for row in range(rows):
                 for column in range(columns):
                     probabilities[row][column] /= sum_probabilities
-            x = 0
+
             # setting probabilities in preparation for next step
             prev_probabilities = [r[:] for r in probabilities]
 
@@ -392,7 +370,7 @@ def test():
 
     if grid is not None:
         try:
-            grid_filepath = Grid.save_grid(grid)
+            grid_filepath = Grid.save_grid(grid, '../test/grid_test.txt')
             print('[PASSED] Save grid\n\n')
         except Exception as e:
             print('[FAILED] Save grid:\n' + e.__str__() + '\n\n')
@@ -404,7 +382,8 @@ def test():
             print("[FAILED] Generate experiment for randomly generated grid:\n" + e.__str__() + '\n\n')
 
         try:
-            experiment_filepath = Grid.save_experiment(ground_truth_states, actions, sensor_readings)
+            experiment_filepath = Grid.save_experiment(ground_truth_states, actions, sensor_readings,
+                                                       '../test/grid_experiment_test.txt')
             print("[PASSED] Save experiment\n\n")
         except Exception as e:
             print("[FAILED] Save experiment:\n" + e.__str__() + '\n\n')
@@ -454,5 +433,18 @@ def test():
         Grid.draw_grid(grid, probabilities)
 
 
+def generate_10_maps_and_100_experiments():
+    if not os.path.exists('../out'):
+        os.makedirs('../out')
+
+    for x in range(10):
+        grid = Grid.generate_grid(100, 50)
+        Grid.save_grid(grid, f'../out/grid_{x}.txt')
+        for y in range(10):
+            ground_truth_states, actions, sensor_readings = Grid.generate_experiment(grid)
+            Grid.save_experiment(ground_truth_states, actions, sensor_readings, f'../out/grid_{x}_experiment_{y}.txt')
+
+
 if __name__ == '__main__':
+    generate_10_maps_and_100_experiments()
     test()
