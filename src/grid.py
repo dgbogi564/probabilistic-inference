@@ -27,8 +27,19 @@ class Grid:
             for line in file:
                 r, c, t = line.split()
                 row, column, terrain = int(r), int(c), t
-                grid[row-1][column-1] = terrain
+                grid[row - 1][column - 1] = terrain
         return grid
+
+    @classmethod
+    def save_grid(cls, grid):
+        rows, columns = len(grid), len(grid[0])
+        filepath = f'grid_{datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")}.txt'
+        with open(filepath, "w") as file:
+            file.write(f'{rows} {columns}\n')
+            for row in range(rows):
+                for column in range(columns):
+                    file.write(f'{row + 1} {column + 1} {grid[row][column]}\n')
+        return filepath
 
     @classmethod
     def generate_grid(cls, rows, columns):
@@ -48,22 +59,10 @@ class Grid:
         return grid
 
     @classmethod
-    def save_grid(cls, grid):
-        rows, columns = len(grid), len(grid[0])
-        filepath = f'grid_{datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")}.txt'
-        with open(filepath, "w") as file:
-            file.write(f'{rows} {columns}\n')
-            for row in range(rows):
-                for column in range(columns):
-                    file.write(f'{row+1} {column+1} {grid[row][column]}\n')
-        return filepath
-
-    @classmethod
-    def draw_grid(cls, grid):
-        # TODO need to label probabilities
+    def draw_grid(cls, grid, probabilities):
         base_cell_size = 150
         base_border_size = 2
-        base_font_size = 35
+        base_font_size = 15
         base_line_width = 5
         base_circle_radius = 10
         width, height = 1000, 1000
@@ -125,9 +124,10 @@ class Grid:
                     pygame.draw.rect(canvas, Grid.BLACK, pygame.Rect(left, top, cell_size, cell_size), border_size)
 
                     # draw cell probabilities
-                    # TODO REPLACE WITH PROBABILITIES
-                    probability_label = pygame.font.SysFont('calibri', font_size).render(str('#.###'), True, Grid.BLACK)
-                    probability_label_rect = probability_label.get_rect(center=(left + cell_size//2, top + cell_size//2))
+                    probability_label = pygame.font.SysFont('calibri', font_size).render(
+                        "{:.2f}".format(probabilities[row][column] * 100) + "%", True, Grid.BLACK)
+                    probability_label_rect = probability_label.get_rect(
+                        center=(left + cell_size // 2, top + cell_size // 2))
                     canvas.blit(probability_label, probability_label_rect)
 
             # draw grid labels
@@ -189,8 +189,37 @@ class Grid:
             pygame.display.update()
 
     @classmethod
-    def generate_ground_truth_paths(cls, grid):
-        # TODO more research into probabilities?
+    def import_experiment(cls, filepath, num_actions):
+        ground_truth_states, actions, sensor_readings = [], [], []
+        with open(filepath, "r") as file:
+            for x in range(num_actions+1):
+                ground_truth_states.append(file.readline().strip('\n'))
+
+            action_states = file.readline().strip('\n')
+            for x in range(len(action_states)):
+                actions.append(action_states[x])
+
+            sensor_reading_states = file.readline().strip('\n')
+            for x in range(len(sensor_reading_states)):
+                sensor_readings.append(sensor_reading_states[x])
+        return ground_truth_states, actions, sensor_readings
+
+    @classmethod
+    def save_experiment(cls, ground_truth_states, actions, sensor_readings):
+        filepath = f'experiment_{datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")}.txt'
+        with open(filepath, "w") as file:
+            # write ground truth states
+            file.write('\n'.join(ground_truth_states) + '\n')
+
+            # write actions
+            file.write(''.join(actions) + '\n')
+
+            # write sensor readings
+            file.write(''.join(sensor_readings) + '\n')
+        return filepath
+
+    @classmethod
+    def generate_experiment(cls, grid):
         row, column = -1, -1
         starting_row, starting_column = -1, -1
         rows, columns = len(grid), len(grid[0])
@@ -204,12 +233,12 @@ class Grid:
         while row == -1:
             r, c = random.choice(coordinates)
             if grid[r][c] != Grid.BLOCKED:
-                starting_row = row = r
-                starting_column = column = c
+                row = r
+                column = c
 
         # generate actions, ground truth states, and sensor readings
         actions = []
-        ground_truth_states = []
+        ground_truth_states = [f'{row} {column}']  # append starting row and column
         sensor_readings = []
         for x in range(100):
             # actions
@@ -232,7 +261,7 @@ class Grid:
                     case Grid.RIGHT:
                         if column < columns - 1 and grid[row][column + 1] != Grid.BLOCKED:
                             column += 1
-            ground_truth_states.append(f'{row} {column}')
+            ground_truth_states.append(f'{row + 1} {column + 1}')
 
             # sensor readings
             num = random.uniform(0, 1)
@@ -243,72 +272,155 @@ class Grid:
                     [x for x in [Grid.NORMAL, Grid.HIGHWAY, Grid.HARD_TO_TRAVERSE] if x != grid[row][column]])
             sensor_readings.append(sensor_reading)
 
-        # write everything to a file
-        filepath = f'ground_truth_path_{datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")}.txt'
-        with open(filepath, "w") as file:
-            # write coordinates of initial cell
-            file.write(f'{starting_row} {starting_column}\n')
-
-            # write ground truth states
-            file.write('\n'.join(ground_truth_states) + '\n')
-
-            # write actions
-            file.write(''.join(actions) + '\n')
-
-            # write sensor readings
-            file.write(''.join(sensor_readings) + '\n')
-
-        return filepath
+        return ground_truth_states, actions, sensor_readings
 
     @classmethod
-    def calculate_probabilities(cls, grid, ground_truth_paths):
-        # TODO
-        pass
+    def calculate_probabilities(cls, grid, actions, sensor_readings):
+        rows, columns = len(grid), len(grid[0])
+
+        num_unblocked_cells = rows * columns - sum(r.count('B') for r in grid)
+        probabilities = [[1 / num_unblocked_cells if grid[r][c] != 'B' else 0 for c in range(columns)] for r in range(rows)]
+        prev_probabilities = [r[:] for r in probabilities]
+
+        # len(actions) == len(sensor_readings)
+        for i in range(len(actions)):
+
+            # actions
+            for row in range(rows):
+                for column in range(columns):
+                    match actions[i]:
+                        # On else, we will be guaranteed to stay at the current grid,
+                        # thus the probability does not change (1 * x = x).
+                        case Grid.UP:
+                            if row > 0 and grid[row][column] != Grid.BLOCKED:
+                                probabilities[row - 1][column] *= prev_probabilities[row][column] * 0.9
+                                probabilities[row][column] *= 0.1
+                        case Grid.DOWN:
+                            if row < rows - 1 and grid[row][column] != Grid.BLOCKED:
+                                probabilities[row + 1][column] *= prev_probabilities[row][column] * 0.9
+                                probabilities[row][column] *= 0.1
+                        case Grid.LEFT:
+                            if column > 0 and grid[row][column] != Grid.BLOCKED:
+                                probabilities[row][column - 1] *= prev_probabilities[row][column] * 0.9
+                                probabilities[row][column] *= 0.1
+                        case Grid.RIGHT:
+                            if column < columns - 1 and grid[row][column] != Grid.BLOCKED:
+                                probabilities[row][column + 1] *= prev_probabilities[row][column] * 0.9
+                                probabilities[row][column] *= 0.1
+
+            #new
+            """
+            0,0: edge case (nothing can ever move to the right square)
+                - probability of it not moving (0.1) * mislabeling terrain (0.05) * probability of square originally (1/8)
+            0,1: 2 different calculations to get to 0, 1 (be at 0,1 or move from 0,0 to 0, 1)
+                - calculate both
+                - starting at 0, 1 and staying at 0, 1
+                - 0.1 for not moving * mislabeling terrain * 1/8
+                - moving from 0, 0 to 0, 1: 0.9 * 0.05 (mislabeling) * 1/8
+                - use 2 probabilities and normalize them
+            0,3: probability is 1
+                - normalize again
+                - moving from 0,2 to 0,3
+                - starting at 0,3
+            """
+
+
+            # sensor readings
+            for row in range(rows):
+                for column in range(columns):
+                    if grid[row][column] != 'B' and grid[row][column] == sensor_readings[i]:
+                        probabilities[row][column] *= 0.9
+                    else:
+                        probabilities[row][column] *= 0.05
+
+            # normalization
+            sum_probabilities = sum(sum(r) for r in probabilities)
+            for row in range(rows):
+                for column in range(columns):
+                    probabilities[row][column] /= sum_probabilities
+
+            # setting probabilities in preparation for next step
+            prev_probabilities = [r[:] for r in probabilities]
+
+        return probabilities
 
 
 def test():
     grid = None
+    probabilities = None
+    grid_filepath = None
+    ground_truth_states, actions, sensor_readings = None, None, None
+    experiment_filepath = None
+
     try:
         grid = Grid.generate_grid(3, 4)
-        print('[PASSED] Generate grid\n')
+        print('[PASSED] Generate grid\n\n')
     except Exception as e:
         print('[FAILED] Generate grid:\n' + e.__str__() + '\n\n')
         exit(1)
 
-    grid_filepath = None
     if grid is not None:
         try:
             grid_filepath = Grid.save_grid(grid)
-            print('[PASSED] Save grid\n')
+            print('[PASSED] Save grid\n\n')
         except Exception as e:
             print('[FAILED] Save grid:\n' + e.__str__() + '\n\n')
 
         try:
-            Grid.generate_ground_truth_paths(grid)
-            print("[PASSED] Generate ground truth paths of randomly generated grid\n")
+            ground_truth_states, actions, sensor_readings = Grid.generate_experiment(grid)
+            print("[PASSED] Generate experiment for randomly generated grid\n\n")
         except Exception as e:
-            print("[FAILED] Generate ground truth paths of randomly generated grid:\n" + e.__str__() + '\n\n')
+            print("[FAILED] Generate experiment for randomly generated grid:\n" + e.__str__() + '\n\n')
+
+        try:
+            experiment_filepath = Grid.save_experiment(ground_truth_states, actions, sensor_readings)
+            print("[PASSED] Save experiment\n\n")
+        except Exception as e:
+            print("[FAILED] Save experiment:\n" + e.__str__() + '\n\n')
+
+        if actions is not None and sensor_readings is not None:
+            try:
+                probabilities = Grid.calculate_probabilities(grid, actions, sensor_readings)
+                print("[PASSED] Calculate probabilities\n\n")
+            except Exception as e:
+                print("[Failed] Calculate probabilities:\n" + e.__str__() + '\n\n')
 
     try:
-        Grid.generate_ground_truth_paths([[Grid.BLOCKED] * 100] * 50)
-        print("[FAILED] Generate ground truth paths of blocked grid\n")
+        Grid.generate_experiment([[Grid.BLOCKED] * 100] * 50)
+        print("[FAILED] Generate experiment of blocked grid\n\n")
     except Exception as e:
         if e.__str__() == "No unblocked cells exist":
-            print("[PASSED] Generate ground truth paths of blocked grid\n")
+            print("[PASSED] Generate experiments of blocked grid\n\n")
 
     if grid_filepath is not None:
         try:
             imported_grid = Grid.import_grid(grid_filepath)
             if imported_grid == grid:
-                print('[PASSED] Import grid\n')
+                print('[PASSED] Import grid\n\n')
             else:
                 raise Exception('Grid mismatch')
         except Exception as e:
             print('[FAILED] Import grid:\n' + e.__str__() + '\n\n')
 
-    print("[INFO] Drawing grid...")
-    Grid.draw_grid(grid)
-    pass
+    if experiment_filepath is not None:
+        try:
+            imported_ground_truth_states, imported_actions, imported_sensor_readings \
+                = Grid.import_experiment(experiment_filepath, 100)
+            if imported_ground_truth_states == ground_truth_states \
+                    and imported_actions == actions \
+                    and imported_sensor_readings == sensor_readings:
+                print('[PASSED] Import experiment\n\n')
+            else:
+                raise Exception('Experiment mismatch')
+        except Exception as e:
+            print('[FAILED] Import experiment:\n' + e.__str__() + '\n\n')
+
+    grid = Grid.import_grid('part_a_grid.txt')
+    _, actions, sensor_readings = Grid.import_experiment('part_a_experiment.txt', 4)
+    probabilities = Grid.calculate_probabilities(grid, actions, sensor_readings)
+    if grid is not None and probabilities is not None:
+        print("[INFO] Drawing grid...")
+        Grid.draw_grid(grid, probabilities)
 
 
 if __name__ == '__main__':
