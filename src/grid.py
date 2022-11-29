@@ -130,13 +130,13 @@ class Grid:
             # draw grid labels
             for column in range(1, columns + 2):
                 x_label = pygame.font.SysFont('calibri', font_size).render(str(column), True, Grid.BLACK)
-                x_label_rect = x_label.get_rect(center=(border_rect.left + (column - 1) * (cell_size - offset),
+                x_label_rect = x_label.get_rect(center=(border_rect.left - column + (column - 1) * (cell_size - offset),
                                                         border_rect.top - 4 * circle_radius))
                 canvas.blit(x_label, x_label_rect)
             for row in range(1, rows + 2):
                 y_label = pygame.font.SysFont('calibri', font_size).render(str(row), True, Grid.BLACK)
                 y_label_rect = y_label.get_rect(center=(border_rect.left - 4 * circle_radius,
-                                                        border_rect.top + (row - 1) * (cell_size - offset)))
+                                                        border_rect.top - row + (row - 1) * (cell_size - offset)))
                 canvas.blit(y_label, y_label_rect)
 
         zoom = 1
@@ -355,6 +355,7 @@ class Grid:
 
 
 def test():
+    cwd = os.getcwd()
     grid = None
     probabilities = None
     grid_filepath = None
@@ -370,7 +371,7 @@ def test():
 
     if grid is not None:
         try:
-            grid_filepath = Grid.save_grid(grid, '../test/grid_test.txt')
+            grid_filepath = Grid.save_grid(grid, cwd + '/test/grid_test.txt')
             print('[PASSED] Save grid\n\n')
         except Exception as e:
             print('[FAILED] Save grid:\n' + e.__str__() + '\n\n')
@@ -383,7 +384,7 @@ def test():
 
         try:
             experiment_filepath = Grid.save_experiment(ground_truth_states, actions, sensor_readings,
-                                                       '../test/grid_experiment_test.txt')
+                                                       cwd + '/test/grid_experiment_test.txt')
             print("[PASSED] Save experiment\n\n")
         except Exception as e:
             print("[FAILED] Save experiment:\n" + e.__str__() + '\n\n')
@@ -391,6 +392,7 @@ def test():
         if actions is not None and sensor_readings is not None:
             try:
                 probabilities = Grid.calculate_probabilities(grid, actions, sensor_readings)
+
                 print("[PASSED] Calculate probabilities\n\n")
             except Exception as e:
                 print("[Failed] Calculate probabilities:\n" + e.__str__() + '\n\n')
@@ -425,8 +427,8 @@ def test():
         except Exception as e:
             print('[FAILED] Import experiment:\n' + e.__str__() + '\n\n')
 
-    grid = Grid.import_grid('part_a_grid.txt')
-    _, actions, sensor_readings = Grid.import_experiment('part_a_experiment.txt', 4)
+    grid = Grid.import_grid('out/grid_6.txt')
+    _, actions, sensor_readings = Grid.import_experiment('out/grid_6_experiment_7.txt', 100)
     probabilities = Grid.calculate_probabilities(grid, actions, sensor_readings)
     if grid is not None and probabilities is not None:
         print("[INFO] Drawing grid...")
@@ -434,17 +436,18 @@ def test():
 
 
 def generate_10_maps_and_100_experiments():
-    if not os.path.exists('../out'):
-        os.makedirs('../out')
+    cwd = os.getcwd()
+    if not os.path.exists(cwd + '/out'):
+        os.makedirs(cwd + '/out')
 
     for x in range(10):
         grid = Grid.generate_grid(100, 50)
-        Grid.save_grid(grid, f'../out/grid_{x}.txt')
+        Grid.save_grid(grid, cwd + f'/out/grid_{x}.txt')
         for y in range(10):
             ground_truth_states, actions, sensor_readings = Grid.generate_experiment(grid)
-            Grid.save_experiment(ground_truth_states, actions, sensor_readings, f'../out/grid_{x}_experiment_{y}.txt')
+            Grid.save_experiment(ground_truth_states, actions, sensor_readings, cwd + f'/out/grid_{x}_experiment_{y}.txt')
 
 
 if __name__ == '__main__':
-    generate_10_maps_and_100_experiments()
+    # generate_10_maps_and_100_experiments()
     test()
