@@ -3,6 +3,8 @@ import random
 import sys
 import os
 from datetime import datetime
+from copy import deepcopy
+from fractions import Fraction
 from pygame.locals import *
 
 class Grid:
@@ -56,7 +58,7 @@ class Grid:
         return grid
 
     @classmethod
-    def draw_grid(cls, grid, probabilities):
+    def draw_grid(cls, grid, actions, sensor_readings):
         base_cell_size = 150
         base_border_size = 2
         base_font_size = 15
@@ -70,10 +72,10 @@ class Grid:
         window = pygame.display.set_mode((width, height), pygame.RESIZABLE)
 
         canvas = pygame.Surface((base_cell_size * (columns + 1), base_cell_size * (rows + 1)))
-        canvas.fill(Grid.WHITE)  # TODO canvas.fill(Grid.WHITE)
+        canvas.fill(Grid.WHITE)
         canvas_rect = canvas.get_rect()
 
-        def draw(zoom):
+        def draw(zoom, step):
             nonlocal canvas
             nonlocal canvas_rect
 
@@ -121,8 +123,8 @@ class Grid:
                     pygame.draw.rect(canvas, Grid.BLACK, pygame.Rect(left, top, cell_size, cell_size), border_size)
 
                     # draw cell probabilities
-                    probability_label = pygame.font.SysFont('calibri', font_size).render(
-                        "{:.7f}".format(probabilities[row][column] * 100) + "%", True, Grid.BLACK)
+                    probabilities = Grid.calculate_probabilities(grid, actions, sensor_readings, step)
+                    probability_label = pygame.font.SysFont('calibri', font_size).render(probabilities[row][column].__str__(), True, Grid.BLACK)
                     probability_label_rect = probability_label.get_rect(
                         center=(left + cell_size // 2, top + cell_size // 2))
                     canvas.blit(probability_label, probability_label_rect)
@@ -139,9 +141,15 @@ class Grid:
                                                         border_rect.top - row + (row - 1) * (cell_size - offset)))
                 canvas.blit(y_label, y_label_rect)
 
+            # draw step label
+            step_label = pygame.font.SysFont('calibri', font_size).render(f'Step: {step}', True, Grid.BLACK)
+            step_label_rect = step_label.get_rect(left=font_size/2, top=font_size/2)
+            canvas.blit(step_label, step_label_rect)
+
         zoom = 1
+        step = 0
         position = [width // 2, height // 2]
-        draw(zoom)
+        draw(zoom, step)
         moving = False
         while True:
             for event in pygame.event.get():
@@ -150,21 +158,21 @@ class Grid:
                     sys.exit()
 
                 # Set moving true while mouse button is held
-                elif event.type == MOUSEBUTTONDOWN:
+                elif event.type == pygame.MOUSEBUTTONDOWN:
                     if canvas_rect.collidepoint(event.pos):
                         moving = True
 
                 # Set moving false when mouse button is released
-                elif event.type == MOUSEBUTTONUP:
+                elif event.type == pygame.MOUSEBUTTONUP:
                     moving = False
 
                 # Click and drag image
-                elif event.type == MOUSEMOTION and moving:
+                elif event.type == pygame.MOUSEMOTION and moving:
                     pos = list(event.rel)
                     canvas_rect.move_ip(pos)
 
                 # Zoom
-                elif event.type == MOUSEWHEEL:
+                elif event.type == pygame.MOUSEWHEEL:
                     if event.y > 0.1:
                         zoom += 0.1
                     elif zoom > 0.2:
@@ -172,7 +180,15 @@ class Grid:
 
                     position[0] = round(canvas_rect.left * zoom)
                     position[1] = round(canvas_rect.right * zoom)
-                    draw(zoom)
+                    draw(zoom, step)
+
+                # Change Step
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_LEFT and step > 0:
+                        step -= 1
+                    if event.key == pygame.K_RIGHT and step < len(actions):
+                        step += 1
+                    draw(zoom, step)
 
             window.fill(Grid.WHITE)
 
@@ -272,22 +288,24 @@ class Grid:
         return ground_truth_states, actions, sensor_readings
 
     @classmethod
-    def calculate_probabilities(cls, grid, actions, sensor_readings):
+    def calculate_probabilities(cls, grid, actions, sensor_readings, step):
         rows, columns = len(grid), len(grid[0])
 
         num_unblocked_cells = rows * columns - sum(r.count('B') for r in grid)
-        probabilities = [[1 / num_unblocked_cells if grid[r][c] != 'B' else 0 for c in range(columns)] for r in range(rows)]
-        prev_probabilities = [r[:] for r in probabilities]
+        probabilities = [[Fraction(1, num_unblocked_cells) if grid[r][c] != 'B' else Fraction(0) for c in range(columns)] for r in range(rows)]
 
         # len(actions) == len(sensor_readings)
-        for i in range(len(actions)):
+        for i in range(step):
+
+            # use previous probabilities for current step
+            prev_probabilities = deepcopy(probabilities)
 
             # actions
             for row in range(rows):
                 for column in range(columns):
                     if grid[row][column] == Grid.BLOCKED:
                         continue
-                    probabilities[row][column] = 0
+                    probabilities[row][column] = Fraction(0)
                     match actions[i]:
                         # Failed to move to next cell from current cell (fails)
                         # Stays at current cell, but didn't fail (blocked or at border)
@@ -295,67 +313,57 @@ class Grid:
                         case Grid.UP:
                             # Failed to move to next cell from current cell (fails)
                             if row > 0 and grid[row - 1][column] != Grid.BLOCKED:
-                                probabilities[row][column] += 0.1 * prev_probabilities[row][column]
+                                probabilities[row][column] += Fraction(1, 10) * prev_probabilities[row][column]
                             # Stays at current cell, but didn't fail (blocked or at border)
                             else:
                                 probabilities[row][column] += prev_probabilities[row][column]
 
                             # Move to current cell from previous cell (success)
                             if row < rows - 1 and grid[row + 1][column] != Grid.BLOCKED:
-                                probabilities[row][column] += 0.9 * prev_probabilities[row+1][column]
+                                probabilities[row][column] += Fraction(9, 10) * prev_probabilities[row+1][column]
 
                         case Grid.DOWN:
                             # Failed to move to next cell from current cell (fails)
                             if row < rows - 1 and grid[row + 1][column] != Grid.BLOCKED:
-                                probabilities[row][column] += 0.1 * prev_probabilities[row][column]
+                                probabilities[row][column] += Fraction(1, 10) * prev_probabilities[row][column]
 
                             # Move to current cell from previous cell (success)
                             if row > 0 and grid[row - 1][column] != Grid.BLOCKED:
-                                probabilities[row][column] += 0.9 * prev_probabilities[row-1][column]
+                                probabilities[row][column] += Fraction(9, 10) * prev_probabilities[row-1][column]
 
 
                         case Grid.LEFT:
                             # Failed to move to next cell from current cell (fails)
                             if column > 0 and grid[row][column - 1] != Grid.BLOCKED:
-                                probabilities[row][column] += 0.1 * prev_probabilities[row][column]
+                                probabilities[row][column] += Fraction(1, 10) * prev_probabilities[row][column]
                             else:
                                 probabilities[row][column] += prev_probabilities[row][column]
                             # Move to current cell from previous cell (success)
                             if column < columns - 1 and grid[row][column+1] != Grid.BLOCKED:
-                                probabilities[row][column] += 0.9 * prev_probabilities[row][column+1]
+                                probabilities[row][column] += Fraction(9, 10) * prev_probabilities[row][column+1]
 
                         case Grid.RIGHT:
                             # Failed to move to next cell from current cell (fails)
                             if column < columns - 1 and grid[row][column + 1] != Grid.BLOCKED:
-                                probabilities[row][column] += 0.1 * prev_probabilities[row][column]
+                                probabilities[row][column] += Fraction(1, 10) * prev_probabilities[row][column]
                             else:
                                 probabilities[row][column] += prev_probabilities[row][column]
                             # Move to current cell from previous cell (success)
                             if column > 0 and grid[row][column-1] != Grid.BLOCKED:
-                                probabilities[row][column] += 0.9 * prev_probabilities[row][column-1]
+                                probabilities[row][column] += Fraction(9, 10) * prev_probabilities[row][column-1]
 
             # sensor readings
             for row in range(rows):
                 for column in range(columns):
                     if grid[row][column] != 'B' and grid[row][column] == sensor_readings[i]:
-                        probabilities[row][column] *= 0.9
+                        probabilities[row][column] *= Fraction(9, 10)
                     else:
-                        probabilities[row][column] *= 0.05
-
-            # normalization
-            sum_probabilities = sum(sum(r) for r in probabilities)
-            for row in range(rows):
-                for column in range(columns):
-                    probabilities[row][column] /= sum_probabilities
-
-            # setting probabilities in preparation for next step
-            prev_probabilities = [r[:] for r in probabilities]
+                        probabilities[row][column] *= Fraction(5, 100)
 
         return probabilities
 
 
 def test():
-    cwd = os.getcwd()
     grid = None
     probabilities = None
     grid_filepath = None
@@ -371,7 +379,7 @@ def test():
 
     if grid is not None:
         try:
-            grid_filepath = Grid.save_grid(grid, cwd + '/test/grid_test.txt')
+            grid_filepath = Grid.save_grid(grid, '../test/grid_test.txt')
             print('[PASSED] Save grid\n\n')
         except Exception as e:
             print('[FAILED] Save grid:\n' + e.__str__() + '\n\n')
@@ -384,15 +392,14 @@ def test():
 
         try:
             experiment_filepath = Grid.save_experiment(ground_truth_states, actions, sensor_readings,
-                                                       cwd + '/test/grid_experiment_test.txt')
+                                                       '../test/grid_experiment_test.txt')
             print("[PASSED] Save experiment\n\n")
         except Exception as e:
             print("[FAILED] Save experiment:\n" + e.__str__() + '\n\n')
 
         if actions is not None and sensor_readings is not None:
             try:
-                probabilities = Grid.calculate_probabilities(grid, actions, sensor_readings)
-
+                Grid.calculate_probabilities(grid, actions, sensor_readings, len(actions))
                 print("[PASSED] Calculate probabilities\n\n")
             except Exception as e:
                 print("[Failed] Calculate probabilities:\n" + e.__str__() + '\n\n')
@@ -427,25 +434,23 @@ def test():
         except Exception as e:
             print('[FAILED] Import experiment:\n' + e.__str__() + '\n\n')
 
-    grid = Grid.import_grid('out/grid_6.txt')
-    _, actions, sensor_readings = Grid.import_experiment('out/grid_6_experiment_7.txt', 100)
-    probabilities = Grid.calculate_probabilities(grid, actions, sensor_readings)
-    if grid is not None and probabilities is not None:
+    grid = Grid.import_grid('../out/grid_0.txt')  # Grid.import_grid('part_a_grid.txt')
+    _, actions, sensor_readings = Grid.import_experiment('../out/grid_0_experiment_0.txt', 4)  # Grid.import_experiment('part_a_experiment.txt', 4)
+    if grid is not None and actions is not None and sensor_readings is not None:
         print("[INFO] Drawing grid...")
-        Grid.draw_grid(grid, probabilities)
+        Grid.draw_grid(grid, actions, sensor_readings)
 
 
 def generate_10_maps_and_100_experiments():
-    cwd = os.getcwd()
-    if not os.path.exists(cwd + '/out'):
-        os.makedirs(cwd + '/out')
+    if not os.path.exists('../out'):
+        os.makedirs('../out')
 
     for x in range(10):
         grid = Grid.generate_grid(100, 50)
-        Grid.save_grid(grid, cwd + f'/out/grid_{x}.txt')
+        Grid.save_grid(grid, f'../out/grid_{x}.txt')
         for y in range(10):
             ground_truth_states, actions, sensor_readings = Grid.generate_experiment(grid)
-            Grid.save_experiment(ground_truth_states, actions, sensor_readings, cwd + f'/out/grid_{x}_experiment_{y}.txt')
+            Grid.save_experiment(ground_truth_states, actions, sensor_readings, f'../out/grid_{x}_experiment_{y}.txt')
 
 
 if __name__ == '__main__':
