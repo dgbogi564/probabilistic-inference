@@ -488,27 +488,30 @@ def generate_error_rate_of_100_experiments():
 
     def get_ground_truth_location(ground_truth):
         row, column = ground_truth.split()
-        return int(row), int(column)
+        return int(row) - 1, int(column) - 1
 
-    def calculate_average_experiment_error(grid, filepath, num_actions):
+    def calculate_average_experiment_error_and_probability(grid, filepath, num_actions):
         ground_truth_states, actions, sensor_readings = Grid.import_experiment(filepath, num_actions)
         probabilities = Grid.calculate_next_probabilities(grid, actions, sensor_readings, 0, 4)
         error_distance = []
-        for step in range(4, len(ground_truth_states)):
+        ground_truth_path_probability = []
+        for step in range(4, len(ground_truth_states) - 1):
             probabilities = Grid.calculate_next_probabilities(grid, actions, sensor_readings, step, step + 1,
                                                               probabilities)
             pr, pc = find_maximum(probabilities)
             gr, gc = get_ground_truth_location(ground_truth_states[step])
             error_distance.append(math.sqrt((pr - gr) ** 2 + (pc - gc) ** 2))
-            return numpy.mean(error_distance)
+            ground_truth_path_probability.append(probabilities[gr][gc])
+        return numpy.mean(error_distance), numpy.mean(ground_truth_path_probability)
 
     with open('../out/error_rate.csv', "w") as file:
-        file.write("grid,experiment,average_distance_error\n")
+        file.write("grid,experiment,average_distance_error, average_ground_truth_path_probability\n")
         for x in range(10):
             grid = Grid.import_grid(f'../out/grid_{x}.txt')
             for y in range(10):
-                average_error = calculate_average_experiment_error(grid, f'../out/grid_{x}_experiment_{y}.txt', 100)
-                file.write(f'{x},{y},{average_error}\n')
+                average_distance_error, average_ground_truth_path_probability = \
+                    calculate_average_experiment_error_and_probability(grid, f'../out/grid_{x}_experiment_{y}.txt', 100)
+                file.write(f'{x},{y},{average_distance_error},{average_ground_truth_path_probability}\n')
 
 
 if __name__ == '__main__':
