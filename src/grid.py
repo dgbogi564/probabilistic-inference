@@ -60,7 +60,7 @@ class Grid:
         return grid
 
     @classmethod
-    def draw_grid(cls, grid, actions, sensor_readings):
+    def draw_grid(cls, grid, actions, sensor_readings, experiment_filepath=None):
         base_cell_size = 150
         base_border_size = 2
         base_font_size = 15
@@ -70,8 +70,6 @@ class Grid:
         rows, columns = len(grid), len(grid[0])
 
         pygame.init()
-
-        window = pygame.display.set_mode((width, height), pygame.RESIZABLE)
 
         canvas = pygame.Surface((base_cell_size * (columns + 1), base_cell_size * (rows + 1)))
         canvas.fill(Grid.WHITE)
@@ -157,6 +155,29 @@ class Grid:
         position = [width // 2, height // 2]
         draw()
         moving = False
+
+        if experiment_filepath:
+            base = os.path.splitext(experiment_filepath)[0]
+
+            step = 10
+            probabilities = Grid.calculate_next_probabilities(grid, actions, sensor_readings, 0, step, probabilities)
+            draw()
+            pygame.image.save(canvas, base + f'_heatmap_step_{step}.png')
+
+            step = 50
+            probabilities = Grid.calculate_next_probabilities(grid, actions, sensor_readings, 10, step, probabilities)
+            draw()
+            pygame.image.save(canvas, base + f'_heatmap_step_{step}.png')
+
+            step = 100
+            probabilities = Grid.calculate_next_probabilities(grid, actions, sensor_readings, 50, step, probabilities)
+            draw()
+            pygame.image.save(canvas, base + f'_heatmap_step_{step}.png')
+
+            pygame.quit()
+            return
+
+        window = pygame.display.set_mode((width, height), pygame.RESIZABLE)
         while True:
             dirty = False
 
@@ -192,8 +213,7 @@ class Grid:
 
                 # Change Step
                 elif event.type == KEYDOWN and event.key == pygame.K_RIGHT and step < len(actions):
-                    probabilities = Grid.calculate_next_probabilities(
-                        grid, actions, sensor_readings, step, step + 1, probabilities)
+                    probabilities = Grid.calculate_next_probabilities(grid, actions, sensor_readings, step, step + 1, probabilities)
                     step += 1
                     dirty = True
 
@@ -514,7 +534,17 @@ def generate_error_rate_of_100_experiments():
                 file.write(f'{x},{y},{average_distance_error},{average_ground_truth_path_probability}\n')
 
 
+def get_heatmap():
+    for x in range(10):
+        grid = Grid.import_grid(f'../out/grid_{x}.txt')
+        for y in range(10):
+            filepath = f'../out/grid_{x}_experiment_{y}.txt'
+            ground_truth_states, actions, sensor_readings = Grid.import_experiment(filepath, 100)
+            Grid.draw_grid(grid, actions, sensor_readings, experiment_filepath=filepath)
+
+
 if __name__ == '__main__':
     # generate_10_maps_and_100_experiments()
     # test()
-    generate_error_rate_of_100_experiments()
+    # generate_error_rate_of_100_experiments()
+    get_heatmap()
