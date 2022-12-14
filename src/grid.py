@@ -1,9 +1,13 @@
+import math
+
+import numpy
 import pygame
 import random
 import sys
 import os
 from datetime import datetime
 from pygame.locals import *
+
 
 class Grid:
     BLACK = (0, 0, 0)  # BORDERS
@@ -144,7 +148,7 @@ class Grid:
 
             # draw step label
             step_label = pygame.font.SysFont('calibri', font_size).render(f'Step: {step}', True, Grid.BLACK)
-            step_label_rect = step_label.get_rect(left=font_size/2, top=font_size/2)
+            step_label_rect = step_label.get_rect(left=font_size / 2, top=font_size / 2)
             canvas.blit(step_label, step_label_rect)
 
         zoom = 1
@@ -213,7 +217,7 @@ class Grid:
         with open(filepath, "r") as file:
             lines = file.readlines()
 
-        for x in range(min(num_actions, len(lines) - 2)):
+        for x in range(min(num_actions + 1, len(lines) - 2)):
             ground_truth_states.append(lines[x].strip())
 
         action_states = lines[-2].strip()
@@ -301,7 +305,8 @@ class Grid:
 
         if not probabilities:
             num_unblocked_cells = rows * columns - sum(r.count('B') for r in grid)
-            probabilities = [[1 / num_unblocked_cells if grid[r][c] != 'B' else 0 for c in range(columns)] for r in range(rows)]
+            probabilities = [[1 / num_unblocked_cells if grid[r][c] != 'B' else 0 for c in range(columns)] for r in
+                             range(rows)]
 
         # len(actions) == len(sensor_readings)
         for i in range(start_step, end_step):
@@ -329,7 +334,7 @@ class Grid:
 
                             # Move to current cell from previous cell (success)
                             if row < rows - 1 and grid[row + 1][column] != Grid.BLOCKED:
-                                probabilities[row][column] += 0.9 * prev_probabilities[row+1][column]
+                                probabilities[row][column] += 0.9 * prev_probabilities[row + 1][column]
 
                         case Grid.DOWN:
                             # Failed to move to next cell from current cell (fails)
@@ -338,7 +343,7 @@ class Grid:
 
                             # Move to current cell from previous cell (success)
                             if row > 0 and grid[row - 1][column] != Grid.BLOCKED:
-                                probabilities[row][column] += 0.9 * prev_probabilities[row-1][column]
+                                probabilities[row][column] += 0.9 * prev_probabilities[row - 1][column]
 
                         case Grid.LEFT:
                             # Failed to move to next cell from current cell (fails)
@@ -347,8 +352,8 @@ class Grid:
                             else:
                                 probabilities[row][column] += prev_probabilities[row][column]
                             # Move to current cell from previous cell (success)
-                            if column < columns - 1 and grid[row][column+1] != Grid.BLOCKED:
-                                probabilities[row][column] += 0.9 * prev_probabilities[row][column+1]
+                            if column < columns - 1 and grid[row][column + 1] != Grid.BLOCKED:
+                                probabilities[row][column] += 0.9 * prev_probabilities[row][column + 1]
 
                         case Grid.RIGHT:
                             # Failed to move to next cell from current cell (fails)
@@ -357,8 +362,8 @@ class Grid:
                             else:
                                 probabilities[row][column] += prev_probabilities[row][column]
                             # Move to current cell from previous cell (success)
-                            if column > 0 and grid[row][column-1] != Grid.BLOCKED:
-                                probabilities[row][column] += 0.9 * prev_probabilities[row][column-1]
+                            if column > 0 and grid[row][column - 1] != Grid.BLOCKED:
+                                probabilities[row][column] += 0.9 * prev_probabilities[row][column - 1]
 
             # sensor readings
             for row in range(rows):
@@ -449,7 +454,8 @@ def test():
             print('[FAILED] Import experiment:\n' + e.__str__() + '\n\n')
 
     grid = Grid.import_grid('../out/grid_0.txt')  # Grid.import_grid('part_a_grid.txt')
-    _, actions, sensor_readings = Grid.import_experiment('../out/grid_0_experiment_0.txt', 100)  # Grid.import_experiment('part_a_experiment.txt', 4)
+    ground_truth_states, actions, sensor_readings = Grid.import_experiment('../out/grid_0_experiment_0.txt',
+                                                                           100)  # Grid.import_experiment('part_a_experiment.txt', 4)
     if grid is not None and actions is not None and sensor_readings is not None:
         print("[INFO] Drawing grid...")
         Grid.draw_grid(grid, actions, sensor_readings)
@@ -467,6 +473,45 @@ def generate_10_maps_and_100_experiments():
             Grid.save_experiment(ground_truth_states, actions, sensor_readings, f'../out/grid_{x}_experiment_{y}.txt')
 
 
+def generate_error_rate_of_100_experiments():
+    def find_maximum(probabilities):
+        r = 0
+        c = 0
+        highest_value = 0
+        for row in range(len(probabilities)):
+            for column in range(len(probabilities[0])):
+                if probabilities[row][column] > highest_value:
+                    highest_value = probabilities[row][column]
+                    r = row
+                    c = column
+        return r, c
+
+    def get_ground_truth_location(ground_truth):
+        row, column = ground_truth.split()
+        return int(row), int(column)
+
+    def calculate_average_experiment_error(grid, filepath, num_actions):
+        ground_truth_states, actions, sensor_readings = Grid.import_experiment(filepath, num_actions)
+        probabilities = Grid.calculate_next_probabilities(grid, actions, sensor_readings, 0, 4)
+        error_distance = []
+        for step in range(4, len(ground_truth_states)):
+            probabilities = Grid.calculate_next_probabilities(grid, actions, sensor_readings, step, step + 1,
+                                                              probabilities)
+            pr, pc = find_maximum(probabilities)
+            gr, gc = get_ground_truth_location(ground_truth_states[step])
+            error_distance.append(math.sqrt((pr - gr) ** 2 + (pc - gc) ** 2))
+            return numpy.mean(error_distance)
+
+    with open('../out/error_rate.csv', "w") as file:
+        file.write("grid,experiment,average_distance_error\n")
+        for x in range(10):
+            grid = Grid.import_grid(f'../out/grid_{x}.txt')
+            for y in range(10):
+                average_error = calculate_average_experiment_error(grid, f'../out/grid_{x}_experiment_{y}.txt', 100)
+                file.write(f'{x},{y},{average_error}\n')
+
+
 if __name__ == '__main__':
     # generate_10_maps_and_100_experiments()
-    test()
+    # test()
+    generate_error_rate_of_100_experiments()
